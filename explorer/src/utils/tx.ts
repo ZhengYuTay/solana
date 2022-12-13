@@ -421,6 +421,65 @@ export const PROGRAM_INFO_BY_ID: { [address: string]: ProgramInfo } = {
     name: PROGRAM_NAMES.OPENBOOK_DEX,
     deployments: [Cluster.MainnetBeta],
   },
+  // Extra DEXs
+  whirLbMiicVdio4qvUfM5KAg6Ct8VwpYzGff3uctyCc: {
+    name: "Whirlpool",
+    deployments: [Cluster.MainnetBeta],
+  },
+  EewxydAPCCVuNEyrVN68PuSYdQ7wKn27V9Gjeoi8dy3S: {
+    name: "Lifinity",
+    deployments: [Cluster.MainnetBeta],
+  },
+  AMM55ShdkoGRB5jVYPjWziwk8m5MpwyDgsMWHaMSQWH6: {
+    name: "Aldrin Swap",
+    deployments: [Cluster.MainnetBeta],
+  },
+  CURVGoZn8zycx6FXwwevgBTB2gVvdbGTEpvMJDbgs2t4: {
+    name: "Aldrin Swap V2",
+    deployments: [Cluster.MainnetBeta],
+  },
+  CTMAxxk34HjKWxQ3QLZK1HpaLXmBveao3ESePXbiyfzh: {
+    name: "Cropper Swap",
+    deployments: [Cluster.MainnetBeta],
+  },
+  CAMMCzo5YL8w4VFF8KVHrK22GGUsp5VTaW7grrKgrWqK: {
+    name: "Raydium AMM V3",
+    deployments: [Cluster.MainnetBeta],
+  },
+  "2wT8Yq49kHgDzXuPxZSaeLaH1qbmGXtEyPy64bL7aD3c": {
+    name: "Lifinity V2",
+    deployments: [Cluster.MainnetBeta],
+  },
+  JUP2jxvXaqu7NQY1GmNF4m1vodw12LVXYxbFL2uJvfo: {
+    name: "Jupiter V2",
+    deployments: [Cluster.MainnetBeta],
+  },
+  JUP3c2Uh3WA4Ng34tw6kPd2G4C5BB21Xo36Je1s32Ph: {
+    name: "Jupiter V3",
+    deployments: [Cluster.MainnetBeta],
+  },
+  JUP4Fb2cqiRUcaTHdrPC8h2gNsA2ETXiPDD33WcGuJB: {
+    name: "Jupiter v4",
+    deployments: [Cluster.MainnetBeta],
+  },
+  // Other
+  SW1TCH7qEPTdLsDHRgPuMQjbQxKdH2aBStViMFnt64f: {
+    name: "Switchboard",
+    deployments: [Cluster.MainnetBeta],
+  },
+  M2mx93ekt1fmXSVkTrUL9xVFHkmME8HTUi5Cyc5aF7K: {
+    name: "Magic Eden",
+    deployments: [Cluster.MainnetBeta],
+  },
+  // BOTs
+  EN1GMAXbcQF3ucku4wpxE45CKUaoBD3yiutrFqNfLfK7: {
+    name: "Enigma",
+    deployments: [Cluster.MainnetBeta],
+  },
+  EvocationV9G8ZTWXPa9QoVsJDmEeGdqk8pxPAt8ApJf: {
+    name: "Evocation",
+    deployments: [Cluster.MainnetBeta],
+  },
 };
 
 export type LoaderName = typeof LOADER_IDS[keyof typeof LOADER_IDS];

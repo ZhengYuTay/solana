@@ -1,5 +1,5 @@
 import React from "react";
-import { Link, useHistory, useLocation } from "react-router-dom";
+import { Link, NavLink, useHistory, useLocation } from "react-router-dom";
 import { Location } from "history";
 import {
   ConfirmedTransactionMeta,
@@ -11,7 +11,7 @@ import {
 import { ErrorCard } from "components/common/ErrorCard";
 import { Signature } from "components/common/Signature";
 import { Address } from "components/common/Address";
-import { pickClusterParams, useQuery } from "utils/url";
+import { clusterPath, pickClusterParams, useQuery } from "utils/url";
 import { useCluster } from "providers/cluster";
 import { displayAddress } from "utils/tx";
 import { parseProgramLogs } from "utils/program-logs";
@@ -32,6 +32,11 @@ const useQueryAccountFilter = (query: URLSearchParams): PublicKey | null => {
     } catch {}
   }
   return null;
+};
+
+const useQueryHideFailed = (query: URLSearchParams): boolean | null => {
+  const filter = query.get("hideFailed");
+  return !!filter;
 };
 
 type SortMode = "index" | "compute" | "fee";
@@ -57,6 +62,7 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
   const query = useQuery();
   const programFilter = useQueryProgramFilter(query);
   const accountFilter = useQueryAccountFilter(query);
+  const hideFailed = useQueryHideFailed(query);
   const sortMode = useQuerySort(query);
   const { cluster } = useCluster();
   const location = useLocation();
@@ -143,11 +149,11 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
         return invocations.has(programFilter);
       })
       .filter(({ index }) => {
+        const tx = block.transactions[index];
+        if (hideFailed && tx.meta?.err) return false;
         if (accountFilter === null) {
           return true;
         }
-
-        const tx = block.transactions[index];
         const accountKeys = tx.transaction.message.getAccountKeys({
           accountKeysFromLookups: tx.meta?.loadedAddresses,
         });
@@ -173,6 +179,7 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
     transactions,
     programFilter,
     accountFilter,
+    hideFailed,
     sortMode,
   ]);
 
@@ -191,6 +198,42 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
     <div className="card">
       <div className="card-header align-items-center">
         <h3 className="card-header-title">{title}</h3>
+        <NavLink
+          className="nav-link"
+          to={pickClusterParams(
+            { ...location, pathname: `/block/${block.parentSlot}` },
+            query
+          )}
+          exact
+        >
+          Previous
+        </NavLink>
+        <NavLink
+          className="nav-link"
+          to={pickClusterParams(
+            { ...location, pathname: `/block/${block.parentSlot + 2}` },
+            query
+          )}
+          exact
+        >
+          Next
+        </NavLink>
+        <div className="me-2">
+          <input
+            type="checkbox"
+            checked={hideFailed ?? false}
+            onClick={() => {
+              if (hideFailed) {
+                query.delete("hideFailed");
+                history.push(pickClusterParams(location, query));
+              } else {
+                query.set("hideFailed", "true");
+                history.push(pickClusterParams(location, query));
+              }
+            }}
+          />
+          <label>Hide failed</label>
+        </div>
         <FilterDropdown
           filter={programFilter}
           toggle={() => setDropdown((show) => !show)}

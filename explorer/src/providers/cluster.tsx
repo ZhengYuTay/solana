@@ -208,7 +208,7 @@ async function updateCluster(
 
     dispatch({
       status: ClusterStatus.Connected,
-      cluster,
+      cluster, // Hardcode for now
       customUrl,
       clusterInfo: {
         firstAvailableBlock,
@@ -247,6 +247,7 @@ export function useCluster() {
   }
   return {
     ...context,
+    cluster: Cluster.MainnetBeta, // Hack to behave as Mainnet while using custom RPC node
     url: clusterUrl(context.cluster, context.customUrl),
     name: clusterName(context.cluster),
   };
