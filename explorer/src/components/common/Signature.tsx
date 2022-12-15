@@ -34,12 +34,14 @@ export function Signature({
       <Copyable text={signature} replaceText={!alignRight}>
         <span className="font-monospace">
           {link ? (
-            <Link
+            <a
               className={truncate ? "text-truncate signature-truncate" : ""}
-              to={clusterPath(`/tx/${signature}`)}
+              href={`https://solscan.io/tx/${signature}`}
+              target="_blank"
+              rel="noopener noreferrer"
             >
               {signatureLabel}
-            </Link>
+            </a>
           ) : (
             signatureLabel
           )}
