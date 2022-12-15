@@ -20,7 +20,7 @@ import { useLocalStorage } from "react-use";
 import Select, { InputActionMeta, ActionMeta, ValueType } from "react-select";
 import StateManager from "react-select";
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 1000;
 
 const useQueryProgramFilter = (query: URLSearchParams): string => {
   const filter = query.get("filter");
