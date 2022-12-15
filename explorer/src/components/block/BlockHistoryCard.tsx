@@ -11,11 +11,14 @@ import {
 import { ErrorCard } from "components/common/ErrorCard";
 import { Signature } from "components/common/Signature";
 import { Address } from "components/common/Address";
-import { clusterPath, pickClusterParams, useQuery } from "utils/url";
+import { pickClusterParams, useQuery } from "utils/url";
 import { useCluster } from "providers/cluster";
 import { displayAddress } from "utils/tx";
 import { parseProgramLogs } from "utils/program-logs";
 import { SolBalance } from "components/common/SolBalance";
+import { useLocalStorage } from "react-use";
+import Select, { InputActionMeta, ActionMeta, ValueType } from "react-select";
+import StateManager from "react-select";
 
 const PAGE_SIZE = 25;
 
@@ -67,79 +70,110 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
   const { cluster } = useCluster();
   const location = useLocation();
   const history = useHistory();
+  const { addressesToFilter, setAddressesToFilter } = useFilterAddresses();
 
-  const { transactions, invokedPrograms } = React.useMemo(() => {
-    const invokedPrograms = new Map<string, number>();
+  const { transactions, invokedPrograms, addressToTxidMap } =
+    React.useMemo(() => {
+      const invokedPrograms = new Map<string, number>();
+      const addressToTxidMap = new Map<string, Set<string>>();
 
-    const transactions: TransactionWithInvocations[] = block.transactions.map(
-      (tx, index) => {
-        let signature: TransactionSignature | undefined;
-        if (tx.transaction.signatures.length > 0) {
-          signature = tx.transaction.signatures[0];
+      const transactions: TransactionWithInvocations[] = block.transactions.map(
+        (tx, index) => {
+          let signature: TransactionSignature | undefined;
+          if (tx.transaction.signatures.length > 0) {
+            signature = tx.transaction.signatures[0];
+          }
+
+          tx.transaction.message.staticAccountKeys.forEach((key) => {
+            if (key) {
+              const address = key.toBase58();
+              if (!addressToTxidMap.has(address)) {
+                addressToTxidMap.set(address, new Set<string>());
+              }
+              addressToTxidMap.get(address)?.add(signature!);
+            }
+          });
+
+          let programIndexes = tx.transaction.message.compiledInstructions
+            .map((ix) => {
+              return ix.programIdIndex;
+            })
+            .concat(
+              tx.meta?.innerInstructions?.flatMap((ix) => {
+                return ix.instructions.map((ix) => ix.programIdIndex);
+              }) || []
+            );
+
+          const indexMap = new Map<number, number>();
+          programIndexes.forEach((programIndex) => {
+            const count = indexMap.get(programIndex) || 0;
+            indexMap.set(programIndex, count + 1);
+          });
+
+          const invocations = new Map<string, number>();
+          const accountKeys = tx.transaction.message.getAccountKeys({
+            accountKeysFromLookups: tx.meta?.loadedAddresses,
+          });
+          for (const [i, count] of indexMap.entries()) {
+            const programId = accountKeys.get(i)!.toBase58();
+            invocations.set(programId, count);
+            const programTransactionCount = invokedPrograms.get(programId) || 0;
+            invokedPrograms.set(programId, programTransactionCount + 1);
+          }
+
+          let logTruncated = false;
+          let computeUnits: number | undefined = undefined;
+          try {
+            const parsedLogs = parseProgramLogs(
+              tx.meta?.logMessages ?? [],
+              tx.meta?.err ?? null,
+              cluster
+            );
+
+            logTruncated = parsedLogs[parsedLogs.length - 1].truncated;
+            computeUnits = parsedLogs
+              .map(({ computeUnits }) => computeUnits)
+              .reduce((sum, next) => sum + next);
+          } catch (err) {
+            // ignore parsing errors because some old logs aren't parsable
+          }
+
+          return {
+            index,
+            signature,
+            meta: tx.meta,
+            invocations,
+            computeUnits,
+            logTruncated,
+          };
         }
-
-        let programIndexes = tx.transaction.message.compiledInstructions
-          .map((ix) => ix.programIdIndex)
-          .concat(
-            tx.meta?.innerInstructions?.flatMap((ix) => {
-              return ix.instructions.map((ix) => ix.programIdIndex);
-            }) || []
-          );
-
-        const indexMap = new Map<number, number>();
-        programIndexes.forEach((programIndex) => {
-          const count = indexMap.get(programIndex) || 0;
-          indexMap.set(programIndex, count + 1);
-        });
-
-        const invocations = new Map<string, number>();
-        const accountKeys = tx.transaction.message.getAccountKeys({
-          accountKeysFromLookups: tx.meta?.loadedAddresses,
-        });
-        for (const [i, count] of indexMap.entries()) {
-          const programId = accountKeys.get(i)!.toBase58();
-          invocations.set(programId, count);
-          const programTransactionCount = invokedPrograms.get(programId) || 0;
-          invokedPrograms.set(programId, programTransactionCount + 1);
-        }
-
-        let logTruncated = false;
-        let computeUnits: number | undefined = undefined;
-        try {
-          const parsedLogs = parseProgramLogs(
-            tx.meta?.logMessages ?? [],
-            tx.meta?.err ?? null,
-            cluster
-          );
-
-          logTruncated = parsedLogs[parsedLogs.length - 1].truncated;
-          computeUnits = parsedLogs
-            .map(({ computeUnits }) => computeUnits)
-            .reduce((sum, next) => sum + next);
-        } catch (err) {
-          // ignore parsing errors because some old logs aren't parsable
-        }
-
-        return {
-          index,
-          signature,
-          meta: tx.meta,
-          invocations,
-          computeUnits,
-          logTruncated,
-        };
-      }
-    );
-    return { transactions, invokedPrograms };
-  }, [block, cluster]);
+      );
+      return { transactions, invokedPrograms, addressToTxidMap };
+    }, [block, cluster]);
 
   const [filteredTransactions, showComputeUnits] = React.useMemo((): [
     TransactionWithInvocations[],
     boolean
   ] => {
     const voteFilter = VOTE_PROGRAM_ID.toBase58();
+
+    const signatureSet = new Set<string>();
+
+    for (let address of addressesToFilter) {
+      addressToTxidMap.get(address)?.forEach((signature) => {
+        console.log({ signature });
+        signatureSet.add(signature);
+      });
+    }
+
     const filteredTxs: TransactionWithInvocations[] = transactions
-      .filter(({ invocations }) => {
+      .filter(({ invocations, signature }) => {
+        if (signatureSet.size > 0) {
+          if (signature) {
+            return signatureSet.has(signature);
+          }
+        }
+
         if (programFilter === ALL_TRANSACTIONS) {
           return true;
         } else if (programFilter === HIDE_VOTES) {
@@ -181,7 +215,13 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
     accountFilter,
     hideFailed,
     sortMode,
+    addressesToFilter,
+    addressToTxidMap,
   ]);
+
+  const addresses = React.useMemo(() => {
+    return new Set(addressToTxidMap.keys());
+  }, [addressToTxidMap]);
 
   if (transactions.length === 0) {
     return <ErrorCard text="This block has no transactions" />;
@@ -196,6 +236,28 @@ export function BlockHistoryCard({ block }: { block: VersionedBlockResponse }) {
 
   return (
     <div className="card">
+      <AddressesBar
+        addresses={addresses}
+        addressesToFilter={addressesToFilter}
+        onAdd={(address) => {
+          setAddressesToFilter((addresses) => {
+            if (!addresses) {
+              addresses = new Set();
+            }
+            addresses.add(address);
+            return new Set(addresses);
+          });
+        }}
+        onRemove={(address) => {
+          setAddressesToFilter((addresses) => {
+            if (!addresses) {
+              addresses = new Set();
+            }
+            addresses.delete(address);
+            return new Set(addresses);
+          });
+        }}
+      />
       <div className="card-header align-items-center">
         <h3 className="card-header-title">{title}</h3>
         <NavLink
@@ -507,3 +569,118 @@ const FilterDropdown = ({
     </div>
   );
 };
+
+type Addresses = Set<string>;
+
+const useFilterAddresses = () => {
+  const [addressesToFilter = new Set(), setAddressesToFilter] =
+    useLocalStorage<Addresses>("addresses", new Set<string>(), {
+      raw: false,
+      serializer: (res) => {
+        return JSON.stringify(Array.from(res));
+      },
+      deserializer: (res) => {
+        return new Set(JSON.parse(res));
+      },
+    });
+
+  return { addressesToFilter, setAddressesToFilter };
+};
+
+interface SearchOptions {
+  label: string;
+  options: {
+    label: string;
+    value: string;
+  }[];
+}
+
+function AddressesBar({
+  addressesToFilter,
+  addresses,
+  onAdd,
+  onRemove,
+}: {
+  addressesToFilter: Set<string>;
+  addresses: Set<string>;
+  onRemove: (address: string) => void;
+  onAdd: (address: string) => void;
+}) {
+  const [search, setSearch] = React.useState("");
+  const searchRef = React.useRef("");
+  const [searchOptions, setSearchOptions] = React.useState<SearchOptions[]>([
+    {
+      label: "Addresses",
+      options: Array.from(addresses.values()).map((address) => ({
+        label: address,
+        value: address,
+      })),
+    },
+  ]);
+  const selectRef = React.useRef<StateManager<any> | null>(null);
+
+  const onChange = (val: ValueType<any, false>, meta: ActionMeta<any>) => {
+    if (meta.action === "select-option") {
+      onAdd(val.value);
+      setSearch("");
+    }
+  };
+
+  const onInputChange = (value: string, { action }: InputActionMeta) => {
+    if (action === "input-change") {
+      setSearch(value);
+    }
+  };
+
+  const resetValue = "" as any;
+
+  return (
+    <div className="container my-4">
+      <div className="pill-container">
+        {Array.from(addressesToFilter?.values() || []).map((address) => (
+          <div
+            className="pill"
+            key={address}
+            onClick={() => {
+              onRemove(address);
+            }}
+          >
+            {address}
+          </div>
+        ))}
+      </div>
+      <div className="row align-items-center">
+        <div className="col">
+          <Select
+            autoFocus
+            ref={(ref) => (selectRef.current = ref)}
+            options={searchOptions}
+            noOptionsMessage={() => "No Results"}
+            placeholder="Enter an address to involve in the result"
+            value={resetValue}
+            inputValue={search}
+            blurInputOnSelect
+            onMenuClose={() => selectRef.current?.blur()}
+            onChange={onChange}
+            styles={{
+              /* work around for https://github.com/JedWatson/react-select/issues/3857 */
+              placeholder: (style) => ({ ...style, pointerEvents: "none" }),
+              input: (style) => ({ ...style, width: "100%" }),
+            }}
+            onInputChange={onInputChange}
+            components={{ DropdownIndicator }}
+            classNamePrefix="search-bar"
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function DropdownIndicator() {
+  return (
+    <div className="search-indicator">
+      <span className="fe fe-search"></span>
+    </div>
+  );
+}
